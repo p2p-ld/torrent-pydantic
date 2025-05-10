@@ -1,6 +1,7 @@
-# torrent-pydantic
+# torrent-models
 
 .torrent file parsing and creation with pydantic
+(and models for other bittorrent things too)
 
 ~ alpha software primarily intended for use with [sciop](https://codeberg.org/Safeguarding/sciop) ~
 
@@ -9,7 +10,10 @@
 - [x] Parsing
   - [x] v1
   - [x] v2
-- [ ] Generation
+- [x] Generation
+  - [x] v1
+  - [x] v2
+  - [ ] hybrid
 
 ## See also
 

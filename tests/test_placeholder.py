@@ -1,2 +1,2 @@
 def test_nothing():
-    import torrent_pydantic  # noqa: F401
+    import torrent_models  # noqa: F401

@@ -1,5 +1,5 @@
 [project]
-name = "torrent-pydantic"
+name = "torrent-models"
 dynamic=["version"]
 description = ".torrent file parsing and creation with pydantic"
 authors = [
@@ -10,6 +10,8 @@ dependencies = [
     "bencode-rs>=0.0.7",
     "tqdm>=4.67.1",
     'typing-extensions>=4.13.0; python_version<"3.12"',
+    "anyio>=4.9.0",
+    "rich>=14.0.0",
 ]
 requires-python = ">=3.11"
 readme = "README.md"
@@ -30,11 +32,23 @@ classifiers = [
     "Typing :: Typed"
 ]
 [project.urls]
-repository = "https://github.com/p2p-ld/torrent-pyd"
+repository = "https://github.com/p2p-ld/torrent-models"
 
 
 [project.optional-dependencies]
+cli = [
+    "click>=8.1.8",
+    "humanize>=4.12.2",
+]
+libtorrent = [
+    "libtorrent>=2.0.11",
+]
+mypy = [
+    "torrent-models[cli]",
+    "types-tqdm>=4.67.0.20250417",
+]
 tests = [
+    "torrent-models[cli,libtorrent]",
     "pytest>=8.3.5",
     "pytest-cov>=6.0.0",
     "pytest-codspeed>=3.2.0",
@@ -42,11 +56,17 @@ tests = [
     "pytest-profiling>=1.8.1",
 ]
 dev = [
-    "torrent-pydantic[tests]",
+    "torrent-models[tests,mypy]",
     "ruff>=0.11.2",
     "black>=25.1.0",
     "mypy>=1.15.0",
+    "types-tqdm>=4.67.0.20250417",
 ]
+
+
+[project.scripts]
+torrent = "torrent_models.cli.main:main"
+
 [build-system]
 requires = ["pdm-backend"]
 build-backend = "pdm.backend"
@@ -81,7 +101,7 @@ benchmark = "pytest tests/bench.py --codspeed"
 
 [tool.ruff]
 target-version = "py311"
-include = ["src/torrent_pyd/**/*.py", "tests/**/*.py", "pyproject.toml"]
+include = ["src/torrent_models/**/*.py", "tests/**/*.py", "pyproject.toml"]
 exclude = []
 line-length = 100
 
@@ -131,6 +151,10 @@ ignore = [
 fixable = ["ALL"]
 
 [tool.ruff.lint.per-file-ignores]
+"src/torrent_models/__init__.py" = [
+    # Import order matters for top level __init__.py
+    "I001"
+]
 "tests/**/test_*" = ["ANN001", "ANN201", "F841"]
 "tests/bench.py" = ["ANN001", "ANN201", "F841"]
 "tests/conftest.py" = ["F403", "E402"]
@@ -138,23 +162,29 @@ fixable = ["ALL"]
 
 [tool.black]
 target-version = ['py311', 'py312', 'py313']
-include = "(?:tests|torrent_pyd)/.*\\.py$"
+include = "(?:tests|torrent_models)/.*\\.py$"
 line-length = 100
 
 [tool.mypy]
-mypy_path = "$MYPY_CONFIG_FILE_DIR/src"
-packages = ["torrent_pyd"]
+mypy_path = "$MYPY_CONFIG_FILE_DIR/src,$MYPY_CONFIG_FILE_DIR/stubs"
+packages = ["torrent_models"]
 warn_redundant_casts = true
 warn_unused_ignores = true
 show_error_context = true
 show_column_numbers = true
 show_error_code_links = true
+allow_redefinition = true
 pretty = true
 color_output = true
+plugins = ['pydantic.mypy']
 
 [tool.pytest]
 addopts = [
-    "--cov=torrent-pyd",
+    "--cov=torrent-models",
     "--cov-append",
 ]
-markers = []
+
+[tool.pytest.ini_options]
+markers = """
+  libtorrent: tests that compare libtorrent-created torrents with torrent-models torrents
+"""

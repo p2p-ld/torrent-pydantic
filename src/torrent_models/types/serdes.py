@@ -1,20 +1,13 @@
-import sys
+"""
+Types used only in model serialization and deserialization:
+AKA types that do not represent concrete types/fields in a torrent file
+"""
+
 from datetime import datetime
-from typing import Annotated, NotRequired, TypeAlias
-from typing import Literal as L
+from typing import Annotated, TypeVar, cast
 
-from pydantic import (
-    AfterValidator,
-    AnyUrl,
-    BaseModel,
-    BeforeValidator,
-    PlainSerializer,
-)
-
-if sys.version_info < (3, 12):
-    from typing_extensions import TypeAliasType, TypedDict
-else:
-    from typing import TypeAliasType, TypedDict
+from pydantic import AnyUrl, BaseModel, BeforeValidator, PlainSerializer, WrapSerializer
+from pydantic_core.core_schema import SerializationInfo, SerializerFunctionWrapHandler
 
 
 def _timestamp_to_datetime(val: int | datetime) -> datetime:
@@ -30,21 +23,6 @@ def _datetime_to_timestamp(val: datetime) -> int:
 UnixDatetime = Annotated[
     datetime, BeforeValidator(_timestamp_to_datetime), PlainSerializer(_datetime_to_timestamp)
 ]
-
-
-# class ByteStrProtocol(EncoderProtocol):
-#     @classmethod
-#     def decode(cls, data: bytes) -> bytes:
-#         return data
-#
-#     @classmethod
-#     def encode(cls, data: bytes) -> bytes:
-#         return data
-#
-#     @classmethod
-#     def get_json_format(cls) -> str:
-#         return 'byte-str'
-
 EXCLUDE_STRINGIFY = ("piece_layers", "piece layers", "path")
 
 
@@ -74,6 +52,7 @@ def str_keys(
 
     if _isdict or value.__class__.__name__ == "dict":
         new_value = {}
+        value = cast(dict, value)
         for k, v in value.items():
             try:
                 if isinstance(k, bytes):
@@ -97,7 +76,7 @@ def str_keys(
         return value
 
 
-def str_keys_list(value: list[dict | BaseModel]) -> list[dict | BaseModel]:
+def str_keys_list(value: list[dict | BaseModel]) -> list[dict | list | BaseModel]:
     return [str_keys(v) for v in value]
 
 
@@ -107,51 +86,42 @@ def _to_str(value: str | bytes) -> str:
     return value
 
 
-def _to_bytes(value: str | bytes) -> bytes:
+def _to_bytes(value: str | bytes, info: SerializationInfo) -> bytes | str:
+    if info.context and info.context.get("mode") == "print":
+        return str(value)
+
     if isinstance(value, str):
         value = value.encode("utf-8")
+    elif isinstance(value, AnyUrl):
+        value = str(value).encode("utf-8")
+    else:
+        value = str(value).encode("utf-8")
     return value
 
 
 ByteStr = Annotated[str, PlainSerializer(_to_bytes)]
 ByteUrl = Annotated[AnyUrl, PlainSerializer(_to_bytes)]
-
-FileName: TypeAlias = ByteStr
-"""Placeholder in case specific validation is needed for filenames"""
-FilePart: TypeAlias = ByteStr
-"""Placeholder in case specific validation is needed for filenames"""
+_Inner = TypeVar("_Inner")
 
 
-def _divisible_by_16kib(size: int) -> bool:
-    if size < 0:
-        return False
-    return size % (16 * (2**10)) == 0
+def _to_list(val: _Inner | list[_Inner]) -> list[_Inner]:
+    if val and not isinstance(val, list):
+        return [val]
+    else:
+        val = cast(list[_Inner], val)
+        return val
 
 
-def _power_of_two(n: int) -> int:
-    return (n & (n - 1) == 0) and n != 0
+def _from_list(
+    val: list[_Inner] | None, handler: SerializerFunctionWrapHandler
+) -> list[_Inner] | _Inner | None:
+    partial = handler(val)
+    if not partial:
+        return None
+    elif len(partial) == 1:
+        return partial[0]
+    else:
+        return partial
 
 
-def _validate_size(size: int) -> int:
-    assert _power_of_two(size), "Piece size must be a power of two"
-    assert size >= 16 * (2**10), "Piece size must be at least 16KiB"
-    # assert _divisible_by_16kib(size), "Piece size must be divisible by 16kib and positive"
-    return size
-
-
-PieceLength = Annotated[int, AfterValidator(_validate_size)]
-
-
-def _validate_pieces(pieces: bytes) -> list[bytes]:
-    assert len(pieces) % 20 == 0, "Pieces length must be divisible by 20"
-    pieces = [pieces[i : i + 20] for i in range(0, len(pieces), 20)]
-    return pieces
-
-
-Pieces = Annotated[bytes, AfterValidator(_validate_pieces), PlainSerializer(lambda x: b"".join(x))]
-
-FileTreeItem = TypedDict("FileTreeItem", {"length": int, "pieces root": NotRequired[bytes]})
-
-FileTree: TypeAlias = TypeAliasType(
-    "FileTree", Annotated[dict[bytes, dict[L[""], FileTreeItem], "FileTree"], "ft"]
-)
+ListOrValue = Annotated[list[_Inner], BeforeValidator(_to_list), WrapSerializer(_from_list)]

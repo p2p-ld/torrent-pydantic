@@ -3,7 +3,7 @@ from pathlib import Path
 import pytest
 from torf import Torrent as TorfTorrent
 
-from torrent_pydantic import Torrent
+from torrent_models import Torrent
 
 DATA_DIR = (Path(__file__).parent / "data").resolve()
 
